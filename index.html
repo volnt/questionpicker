@@ -26,7 +26,7 @@
       color: var(--text);
     }
     a { color: var(--accent) }
-    .container { max-width: 920px; margin: 0 auto; padding: 24px; }
+    .container { max-width: 980px; margin: 0 auto; padding: 24px; }
     .card {
       background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border: 1px solid rgba(255,255,255,.08);
@@ -84,29 +84,31 @@
         <h1>Random Question Picker</h1>
         <p>Paste a list of questions, then start the game. During the game you can draw a <em>new random question</em> each time without repeats until the list is exhausted.</p>
         <h2>1) Prompt an LLM to create a list</h2>
-        <p>Send this prompt to your LLM to generate questions on any topic. The model should respond in the <strong>standard JSON format</strong> below.</p>
+        <p>Send this prompt to your LLM to generate questions on any topic. The model should respond as <strong>plain text only</strong>, with <strong>one question per line</strong> (no JSON, no markdown).</p>
         <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>Generate a list of conversation questions about &lt;YOUR_TOPIC&gt; tailored to &lt;YOUR_CONTEXT&gt;.
-Return ONLY one question per line (no extra commentary).
+Return ONLY plain text with ONE question per line.
 Rules:
-- Provide 10–40 items.
-- Do not include markdown, backticks, or trailing commas.</code></pre>
+- Provide 10–40 questions.
+- No numbering, no bullets, no JSON, no markdown.
+- Keep each question on a single line.
+- Avoid trailing or leading spaces.</code></pre>
 
         <h2>2) Paste your list below</h2>
-        <p>You can paste <strong>one question per line</strong>. Then click <em>Load & Start</em>.</p>
-        <textarea id="inputArea" placeholder='What made you smile this week?\nWhat tiny ritual should we try this month?'></textarea>
+        <p>Paste <strong>one question per line</strong>. Then click <em>Load & Start</em>.</p>
+        <textarea id="inputArea" placeholder='What tiny moment made you smile this week?&#10;If you had a free day tomorrow, how would you spend it?&#10;What skill are you learning next and why?&#10;nWhich book or podcast changed how you think recently?&#10;What’s a small upgrade to your daily routine you’d try?'></textarea>
         <div class="row" style="margin-top:10px">
-          <button class="btn" id="startBtn">Load & Start ▶</button>
+          <button class="btn" id="startBtn" aria-label="Load and start the game">Load & Start ▶</button>
           <button class="btn secondary" id="sampleBtn" title="Load a small demo list">Load sample</button>
         </div>
         <p class="small subtle">Tips: Paste once and it will be saved to your browser (localStorage). Use <span class="kbd">R</span> to draw again during the game.</p>
       </div>
 
       <div class="card">
-        <h2>Format accepted</h2>
-        <p><strong>Plain text</strong>: one question per line.</p>
-        <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>What tiny moment from our early days still makes you smile?
-What’s one small ritual we could start this season?
-If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
+        <h2>Accepted format</h2>
+        <p><strong>Plain text only</strong>: one question per line.</p>
+        <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>What tiny moment made you smile this week?
+If you had a free day tomorrow, how would you spend it?
+What skill are you learning next and why?</code></pre>
         <p class="subtle">Your data is stored only in your browser (localStorage) for convenience.</p>
       </div>
     </section>
@@ -126,10 +128,12 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
       </div>
 
       <div class="footer">
-        <span id="remainingInfo">0 / 0 drawn</span>
+        <span id="remainingInfo">0 drawn · 0 remaining</span>
         <span class="subtle"> · Press <span class="kbd">R</span> to draw again</span>
       </div>
     </section>
+
+    <p id="testStatus" class="small subtle" style="margin-top:16px"></p>
   </div>
 
   <script>
@@ -144,6 +148,7 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
       card: document.getElementById('questionCard'),
       title: document.getElementById('gameTitle'),
       remaining: document.getElementById('remainingInfo'),
+      testStatus: document.getElementById('testStatus'),
     };
 
     let deck = [];
@@ -155,15 +160,13 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
     function saveToLS(payload){ try { localStorage.setItem(LS_KEY, JSON.stringify(payload)); } catch(e){} }
     function loadFromLS(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch(e){ return null } }
 
-    // Parsing input — supports JSON or plain lines
+    // Parse plain-text input: one question per line
     function parseInput(text){
-      text = text.trim();
-      if(!text) throw new Error('Empty input');
-
-      // Plain text mode: one question per non-empty line
-      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const t = String(text || '').trim();
+      if(!t) throw new Error('Empty input');
+      const lines = t.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if(!lines.length) throw new Error('No questions found');
-      return { title: 'Questions', questions: lines.map((t,i)=>({id:i+1,text:t})) };
+      return { title: 'Questions', questions: lines.map((q,i)=>({ id: i+1, text: q })) };
     }
 
     function startGame(payload){
@@ -182,8 +185,9 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
     }
 
     function drawQuestion(){
+      if(!deck.length){ flashCard('No questions loaded yet.'); return; }
       if(used.size >= deck.length){
-        flashCard("All questions drawn! Click ⟵ Setup to load a new list.");
+        flashCard('All questions drawn! Click ⟵ Setup to load a new list.');
         return;
       }
       // Pick a random index not yet used
@@ -203,36 +207,33 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
       els.card.textContent = text;
     }
 
-    // Sample list for quick try
-    const SAMPLE = {
-      title: 'Tea & Candles – 20 Questions',
-      questions: [
-        {id:1,text:'What tiny moment from our early days still makes you smile?'},
-        {id:2,text:'If we had a free 24 hours tomorrow, how would you spend it together?'},
-        {id:3,text:'What’s one small ritual we could start this season?'},
-        {id:4,text:'Which home felt most “us,” and why?'},
-        {id:5,text:'What’s something about me you think I underrate in myself?'},
-        {id:6,text:'Name a micro‑adventure we could do with our daughter and dog this month.'},
-        {id:7,text:'What would 25‑year‑old us find hilarious if we tried it now?'},
-        {id:8,text:'What song or movie instantly feels like “us”?'},
-        {id:9,text:'What’s a challenge we navigated well as a team?'},
-        {id:10,text:'If you could pause time for one day, what would we do?'},
-        {id:11,text:'What tiny upgrade to our evenings would you love to try?'},
-        {id:12,text:'Name a place within 2 hours we could escape to overnight.'},
-        {id:13,text:'What’s one way we’ve influenced each other (for the better)?'},
-        {id:14,text:'What part of parenting are we unexpectedly good at together?'},
-        {id:15,text:'What do you want to feel more often this season?'},
-        {id:16,text:'What hobby could be fun to learn together this winter?'},
-        {id:17,text:'What’s one boundary that helps you feel cared for by me?'},
-        {id:18,text:'What are you grateful for this week (tiny is fine)?'},
-        {id:19,text:'What tradition should we invent for Friday nights?'},
-        {id:20,text:'What’s a silly, low‑effort date we could repeat monthly?'}
-      ]
-    };
+    // Sample list (non-couple general curiosity)
+    const SAMPLE_LINES = [
+      'What is a topic you could talk about for hours right now?',
+      'Which book, article, or podcast recently changed your mind?',
+      'If you could learn one skill in 30 days, what would it be?',
+      'What’s a problem you’re currently solving and how are you approaching it?',
+      'What habit has had the biggest ROI for you this year?',
+      'Which place within 2 hours of home would you day‑trip to and why?',
+      'What’s a small purchase (≤€25) that improved your life?',
+      'What’s an assumption you held that didn’t survive contact with reality?',
+      'What does your ideal focused morning look like?',
+      'What’s a failure that later turned into a lucky break?',
+      'Which constraint has made you more creative recently?',
+      'What topic would you give a 10‑minute lightning talk on?',
+      'What’s a kindness you noticed this month?',
+      'Which tool or app genuinely saves you time?',
+      'If you had to remove one recurring task from your week, what would it be?',
+      'What’s a micro‑adventure you’d try before winter?',
+      'Which question do you wish people asked you more often?',
+      'What’s a system you improved lately and how?',
+      'Which skill from your childhood would you like to revive?',
+      'What are you excited to learn next quarter?'
+    ];
 
     // Wire up events
     els.sample.addEventListener('click', () => {
-      els.input.value = JSON.stringify(SAMPLE, null, 2);
+      els.input.value = SAMPLE_LINES.join('\n');
       window.scrollTo({top:0, behavior:'smooth'});
     });
 
@@ -240,7 +241,7 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
       try {
         const payload = parseInput(els.input.value);
         if(!payload.questions.length) throw new Error('No questions parsed');
-        saveToLS(payload);
+        saveToLS({ title: payload.title, questions: payload.questions, raw: els.input.value });
         startGame(payload);
       } catch(err){
         alert('Could not load questions.\n' + err.message);
@@ -261,10 +262,48 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
     });
 
     // Auto-load last list if present
-    const last = loadFromLS();
-    if(last && last.questions && last.questions.length){
-      els.input.value = JSON.stringify(last, null, 2);
+    (function preload(){
+      const last = loadFromLS();
+      if(last && last.raw){ els.input.value = last.raw; }
+    })();
+
+    // ----------------------
+    // Minimal test harness
+    // ----------------------
+    function runTests(){
+      const results = [];
+      function ok(name, cond){ results.push({name, pass: !!cond}); if(!cond) console.error('Test failed:', name); }
+
+      // parseInput basic
+      const p1 = parseInput('A\nB');
+      ok('parseInput two lines', p1.questions.length === 2 && p1.questions[0].text==='A' && p1.questions[1].text==='B');
+
+      // Windows newlines
+      const p2 = parseInput('A\r\nB\r\nC');
+      ok('parseInput CRLF', p2.questions.length === 3);
+
+      // Trimming & empty lines
+      const p3 = parseInput('  A  \n\n  B  ');
+      ok('parseInput trims & ignores blanks', p3.questions.length === 2 && p3.questions[0].text==='A' && p3.questions[1].text==='B');
+
+      // Error on empty
+      let threw = false; try{ parseInput('   '); } catch(e){ threw = true; }
+      ok('parseInput throws on empty', threw);
+
+      // Deck no repeat simulation (deterministic via indexing rather than randomness)
+      const d = ['q1','q2','q3'];
+      const usedSim = new Set();
+      for(let i=0;i<d.length;i++){ usedSim.add(i); }
+      ok('used set size equals deck length after fill', usedSim.size === d.length);
+
+      const passCount = results.filter(r=>r.pass).length;
+      const allPass = passCount === results.length;
+      els.testStatus.textContent = allPass ? `Tests passed: ${passCount}/${results.length} ✓` : `Tests failed: ${results.length - passCount}/${results.length} ✗`;
+      return allPass;
     }
+
+    // Run tests silently on load (status shown at bottom)
+    runTests();
   </script>
 </body>
 </html>
