@@ -86,22 +86,14 @@
         <h2>1) Prompt an LLM to create a list</h2>
         <p>Send this prompt to your LLM to generate questions on any topic. The model should respond in the <strong>standard JSON format</strong> below.</p>
         <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>Generate a list of conversation questions about &lt;YOUR_TOPIC&gt; tailored to &lt;YOUR_CONTEXT&gt;.
-Return ONLY valid JSON with this exact shape (no extra commentary):
-{
-  "title": "&lt;short title&gt;",
-  "questions": [
-    { "id": 1, "text": "..." },
-    { "id": 2, "text": "..." }
-  ]
-}
+Return ONLY one question per line (no extra commentary).
 Rules:
 - Provide 10–40 items.
-- Each object MUST include numeric "id" and string "text" fields.
 - Do not include markdown, backticks, or trailing commas.</code></pre>
 
         <h2>2) Paste your list below</h2>
-        <p>You can paste either <strong>the JSON above</strong> or simply <strong>one question per line</strong>. Then click <em>Load & Start</em>.</p>
-        <textarea id="inputArea" placeholder='Example JSON:\n{\n  "title": "Tea & Candles – 20 Questions",\n  "questions": [\n    { "id": 1, "text": "What made you smile this week?" },\n    { "id": 2, "text": "What tiny ritual should we try this month?" }\n  ]\n}\n\n—or—\nOne question per line\nWhat made you smile this week?\nWhat tiny ritual should we try this month?'></textarea>
+        <p>You can paste <strong>one question per line</strong>. Then click <em>Load & Start</em>.</p>
+        <textarea id="inputArea" placeholder='What made you smile this week?\nWhat tiny ritual should we try this month?'></textarea>
         <div class="row" style="margin-top:10px">
           <button class="btn" id="startBtn">Load & Start ▶</button>
           <button class="btn secondary" id="sampleBtn" title="Load a small demo list">Load sample</button>
@@ -110,16 +102,8 @@ Rules:
       </div>
 
       <div class="card">
-        <h2>Standard formats accepted</h2>
-        <p><strong>A) JSON object</strong> with <span class="mono">title</span> and <span class="mono">questions[]</span> (objects require <span class="mono">id</span> + <span class="mono">text</span>):</p>
-        <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>{
-  "title": "Tea & Candles – 20 Questions",
-  "questions": [
-    { "id": 1, "text": "What tiny moment from our early days still makes you smile?" },
-    { "id": 2, "text": "What’s one small ritual we could start this season?" }
-  ]
-}</code></pre>
-        <p><strong>B) Plain text</strong>: one question per line.</p>
+        <h2>Format accepted</h2>
+        <p><strong>Plain text</strong>: one question per line.</p>
         <pre class="mono card" style="white-space:pre-wrap; padding:14px; overflow:auto"><code>What tiny moment from our early days still makes you smile?
 What’s one small ritual we could start this season?
 If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
@@ -175,22 +159,6 @@ If we had a free 24 hours tomorrow, how would you want to spend it?</code></pre>
     function parseInput(text){
       text = text.trim();
       if(!text) throw new Error('Empty input');
-      // Try JSON first
-      try {
-        const obj = JSON.parse(text);
-        if(Array.isArray(obj)){
-          return { title: 'Questions', questions: obj.map((t, i) => ({ id: i+1, text: String(t).trim() })).filter(q => q.text) };
-        }
-        if(obj && Array.isArray(obj.questions)){
-          const qs = obj.questions.map((q, i) => ({ id: Number(q.id ?? (i+1)), text: String(q.text ?? '').trim() })).filter(q => q.text);
-          return { title: String(obj.title || 'Questions'), questions: qs };
-        }
-        // If JSON string
-        if(typeof obj === 'string'){
-          const lines = obj.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-          return { title: 'Questions', questions: lines.map((t,i)=>({id:i+1,text:t})) };
-        }
-      } catch(e){ /* fall back to plain text */ }
 
       // Plain text mode: one question per non-empty line
       const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
